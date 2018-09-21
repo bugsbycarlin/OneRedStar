@@ -41,6 +41,7 @@ namespace Honey {
     http://www.friendsonmountains.com/blog/2018/07/12/lets-make-honey-version-0-06-draw-caching
     http://www.friendsonmountains.com/blog/2018/07/21/lets-make-honey-version-0-10-starshine-the-graphics
     http://www.friendsonmountains.com/blog/2018/07/25/lets-make-honey-version-0-12-layouts-and-refactoring
+    http://www.friendsonmountains.com/blog/2018/08/28/lets-make-honey-version-0-15-attaching-effects
   */
   class Graphics final {
    public:
@@ -50,6 +51,20 @@ namespace Honey {
       @return This'll get you the one instance of Graphics you're supposed to have.
     */
     static Graphics& instance();
+
+    /*!
+      Effects Types.
+
+      See graphs in http://www.friendsonmountains.com/blog/2018/07/14/lets-make-honey-version-0-07-effects
+    */
+    enum TWEEN_STYLES {
+      LINEAR, /*!< Linear Tween. Constant speed. */
+      SIGMOID, /*!< Sigmoid Tween. Starts slow, gets fast in the middle, ends slow. */
+      CUBIC, /*!< Cubic Tween. Starts fast, pauses in the middle, ends fast. */
+      RAMPDOWN, /*!< Rampdown Tween. Starts fast, ends slow. */
+      RAMPUP, /*!< Rampdown Tween. Starts slow, ends fast. */
+      SINEWAVE /*!< Sinewave Tween. Moves from start to end, then boomerangs back to start. */
+    };
 
     /*!
       Initialize Graphics by performing OpenGL setup, including shaders, rendering pipeline, and model-view-control type stuff.
@@ -78,7 +93,7 @@ namespace Honey {
     /*!
       Perform a rotation by the specified angle, around a vector defined by x, y, and z.
       
-      @param angle desired rotation angle.
+      @param angle desired rotation angle in degrees.
       @param x component of rotation vector.
       @param y component of rotation vector.
       @param z component of rotation vector.
@@ -93,6 +108,22 @@ namespace Honey {
       @param z desired rescale along the z axis.
     */
     void scale(float x, float y, float z);
+
+    /*!
+      Return width of an image
+
+      @param label the name of an image in our system. It is assumed this has already been loaded with addImage.
+      @returns width of the label
+    */
+    int getWidth(string label);
+
+    /*!
+      Return height of an image
+
+      @param label the name of an image in our system. It is assumed this has already been loaded with addImage.
+      @returns height of the label
+    */
+    int getHeight(string label);
 
     /*!
       Parse a string color such as #FFD4C5 into a floatColor primitive.
@@ -206,7 +237,7 @@ namespace Honey {
       @param x_position desired x coordinate of the image on the screen.
       @param y_position desired y coordinate of the image on the screen.
       @param centered whether to draw the image from the center instead of the top left.
-      @param rotation desired clockwise rotation of the image on the screen.
+      @param rotation desired clockwise rotation of the image on the screen in degrees.
       @param scale desired scale of the image on the screen (1 is the original size, 0.5 is half size, 2 is double size, etc).
     */
     void drawImage(string label, int x_position, int y_position, bool centered, float rotation, float scale);

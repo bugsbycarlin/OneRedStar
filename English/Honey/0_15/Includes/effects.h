@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <unordered_map>
 
-#include "logic.h"
+#include "timing.h"
 
 using namespace std;
 
@@ -23,6 +23,7 @@ namespace Honey {
     Primarily covered in blog posts:
 
     http://www.friendsonmountains.com/blog/2018/07/14/lets-make-honey-version-0-07-effects
+    http://www.friendsonmountains.com/blog/2018/08/31/lets-make-honey-version-0-15-sprites
   */
   class Effects final {
    public:
@@ -47,13 +48,49 @@ namespace Honey {
       SINEWAVE /*!< Sinewave Tween. Moves from start to end, then boomerangs back to start. */
     };
 
+    enum STATE {
+      WAITING,
+      BUSY,
+      FINISHED
+    };
+
     /*!
-      Check for the existence of an effect.
+      Start the effect!
+
+      @param label The effect you want to start.
+    */
+    void start(string label);
+
+    /*!
+      Stop the effect!
+
+      @param label The effect you want to stop.
+    */
+    void stop(string label);
+
+    /*!
+      Check whether an effect is waiting.
+
+      @param label The effect you want to check.
+      @return true if and only if the label exists and the state is waiting.
+    */
+    bool waiting(string label);
+
+    /*!
+      Check whether an effect is busy.
+
+      @param label The effect you want to check.
+      @return true if and only if the label exists and the state is busy.
+    */
+    bool busy(string label);
+
+    /*!
+      Check whether an effect is finished.
       
       @param label The effect you want to check.
-      @return true if and only if the label exists.
+      @return true if and only if the label exists and the state is finished.
     */
-    bool check(string label);
+    bool finished(string label);
 
     /*!
       Remove all effects currently stored in the Effects instance.
@@ -133,9 +170,10 @@ namespace Honey {
 
     const float sigmoid_steepness = 5;
 
-    unordered_map<string, float> tween_starts;
-    unordered_map<string, float> tween_ends;
-    unordered_map<string, float> sizes;
+    unordered_map<string, int> state;
+    unordered_map<string, float> start_value;
+    unordered_map<string, float> end_value;
+    unordered_map<string, float> size;
   };
 
   extern Effects& effects;

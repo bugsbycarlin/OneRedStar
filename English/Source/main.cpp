@@ -8,19 +8,36 @@
 using namespace Honey;
 using namespace std;
 
-int screen_width;
-int screen_height;
-string screen_color;
-float sound_volume;
-float music_volume;
+
+// Method definitions
+void initialize();
+void initializeAssets();
+void initializeLogic();
+void initializeEffects();
+void initializeInput();
+
+void logic();
+void inputLogic();
+void animationSequence(int sequence_counter, float duration);
+int randomOutside(int size);
+void shuffle(int new_number);
+void remake();
+
+void render();
+
+void cleanup();
+
+
+// Globals
 float fade_in_duration;
 float word_duration;
 float fade_out_duration;
 float fade_out_stagger;
 float shake_width;
 
-// star, square, triangle, circle, pentagon, hexagon, octagon, arrow, diamond, heart
-array<string, 10> shapes = {
+const int max_number = 10;
+
+const array<string, max_number> shapes = {
   "Triangle",
   "Square",
   "Pentagon",
@@ -33,15 +50,27 @@ array<string, 10> shapes = {
   "Heart"
 };
 
-array<string, 10> color_names = {"Green", "Red", "Grey", "Blue", "Purple", "Orange", "Yellow", "Black", "Pink", "Brown"};
-array<string, 10> color_values;
+const array<string, max_number> color_names = {
+  "Green",
+  "Red",
+  "Grey",
+  "Blue",
+  "Purple",
+  "Orange",
+  "Yellow",
+  "Black",
+  "Pink",
+  "Brown"};
 
-vector<string> sequence_action;
-vector<float> sequence_timing;
+array<string, max_number> color_values;
 
+array<Sprite*, max_number> shape_sprites;
 Textbox* number_text;
 Textbox* color_text;
 Textbox* shape_text;
+
+vector<string> sequence_action;
+vector<float> sequence_timing;
 
 int number;
 string shape;
@@ -51,71 +80,195 @@ float size;
 
 bool quit = false;
 
-int randomOutside(int size);
-void shuffle(int new_number);
-void remake();
-void handleInput();
-void handleAction();
-void render();
+
 
 int main(int argc, char* args[]) {
+  initialize();
+
+  quit = false;
+  while (!quit) {
+    hot_config.checkAndUpdate();
+
+    logic();
+    render();
+  }
+
+  cleanup();
+}
+
+void initialize() {
   StartHoney("OneRedStar");
 
-  screen_width = hot_config.getInt("layout", "screen_width");
-  screen_height = hot_config.getInt("layout", "screen_height");
-  screen_color = hot_config.getString("layout", "screen_color");
-  sound_volume = hot_config.getFloat("sound", "sound_volume");
-  music_volume = hot_config.getFloat("sound", "music_volume");
+  initializeAssets();
+  initializeLogic();
+  initializeInput();
+}
+
+void animationSequence(int sequence_counter, float duration) {
+  if (sequence_counter >= sequence_action.size()) {
+    return;
+  }
+  
+  string action = sequence_action[sequence_counter];
+
+  if (action.find("fade_in") != string::npos) {
+    number_text->setOpacity(1, fade_in_duration);
+    color_text->setOpacity(1, fade_in_duration);
+    shape_text->setOpacity(1, fade_in_duration);
+    for(int i = 0; i < number; i++) {
+      shape_sprites[i]->setOpacity(1, fade_in_duration);
+      shape_sprites[i]->shakePosition(shake_width, fade_in_duration);
+    }
+  } else if (action == "number_word") {
+    number_text->shakePosition(shake_width, word_duration);
+    sound.playSound(to_string(number), 1);
+  } else if (action == "color_word") {
+    color_text->shakePosition(shake_width, word_duration);
+    sound.playSound(color_name, 1);
+  } else if (action == "shape_word") {
+    shape_text->shakePosition(shake_width, word_duration);
+    if (number < 2) {
+      sound.playSound(shape, 1);
+    } else {
+      sound.playSound(shape + "s", 1);
+    }
+  } else if (action.find("fade_out_") != string::npos) {
+    int val = stoi(action.substr(9,1)) - 1;
+    if (action.length() == 11) {
+      val = stoi(action.substr(9,2)) - 1;
+    }
+    shape_sprites[val]->setOpacity(0, fade_out_duration);
+    if (val == 0) {
+      number_text->setOpacity(0, fade_out_duration);
+      color_text->setOpacity(0, fade_out_duration);
+      shape_text->setOpacity(0, fade_out_duration);
+    }
+  }
+}
+
+void initializeLogic() {
+
   fade_in_duration = hot_config.getFloat("animation", "fade_in_duration");
   word_duration = hot_config.getFloat("animation", "word_duration");
   fade_out_duration = hot_config.getFloat("animation", "fade_out_duration");
   fade_out_stagger = hot_config.getFloat("animation", "fade_out_stagger");
   shake_width = hot_config.getFloat("animation", "shake_width");
 
-  // Load assets
+  for (int i = 0; i < color_names.size(); i++) {
+    color_values[i] = hot_config.getString("colors", color_names[i]);
+  }
+
+  shuffle(1);
+}
+
+void initializeAssets() {
+
+  // Load shape images
   for (int i = 0; i < shapes.size(); i++) {
     graphics.addImage(shapes[i], "Art/" + shapes[i] + ".png");
-    sound.addSound(to_string(i + 1), "Sound/" + to_string(i + 1) + ".wav");
+  }
+
+  // Make shape sprites
+  for (int i = 0; i < shapes.size(); i++) {
+    shape_sprites[i] = new Sprite(
+      shapes[i],
+      origin,
+      "#ffffff", 1.0, 0.0, 1.0
+    );
+    shape_sprites[i]->setOpacity(0);
+  }
+
+  // Load shape word sounds
+  for (int i = 0; i < shapes.size(); i++) {
     sound.addSound(shapes[i], "Sound/" + shapes[i] + ".wav");
     sound.addSound(shapes[i] + "s", "Sound/" + shapes[i] + "s.wav");
   }
+
+  // Load color word sounds
   for (int i = 0; i < color_names.size(); i++) {
-    color_values[i] = hot_config.getString("colors", color_names[i]);
     sound.addSound(color_names[i], "Sound/" + color_names[i] + ".wav");
   }
+
+  // Load number word sounds
+  for (int i = 1; i <= max_number; i++) {
+    sound.addSound(to_string(i), "Sound/" + to_string(i) + ".wav");
+  }
+
+  // Load extra sounds
   sound.addSound("dink_0", "Sound/C_Square2.wav");
   sound.addSound("dink_1", "Sound/C_Square1.wav");
 
-  // Make textboxos with junk default values
+  // Set volume from config
+  sound.setSoundVolume(hot_config.getFloat("sound", "sound_volume"));
+  sound.setMusicVolume(hot_config.getFloat("sound", "music_volume"));
+
+  // Make textboxers with default values
   string font = hot_config.getString("layout", "font");
-  number_text = new Textbox(font, hot_config.getInt("layout", "number_text_font_size"), "a", "#77dd77", 1, 2);
-  color_text = new Textbox(font, hot_config.getInt("layout", "color_text_font_size"), "b", "#77dd77", 3, 4);
-  shape_text = new Textbox(font, hot_config.getInt("layout", "shape_text_font_size"), "c", "#77dd77", 5, 6);
-  
-  shuffle(1);
+  number_text = new Textbox(
+    font, hot_config.getInt("layout", "number_text_font_size"),
+    "a", origin, "#77dd77");
+  color_text = new Textbox(
+    font, hot_config.getInt("layout", "color_text_font_size"),
+    "b", origin, "#77dd77");
+  shape_text = new Textbox(
+    font, hot_config.getInt("layout", "shape_text_font_size"),
+    "c", origin, "#77dd77");
+}
 
-  sound.setSoundVolume(sound_volume);
-  sound.setMusicVolume(music_volume);
+void initializeInput() {
 
-  // Game loop
-  while (!quit) {
-    hot_config.checkAndUpdate();
+}
 
-    handleInput();
+void logic() {
+  inputLogic();
+  if (timing.locked("animating")) {
+    timing.doSequence("animation_sequence");
+  }
+}
 
-    handleAction();
+void inputLogic() {
+  input.processInput();
 
-    render();
+  if (input.threeQuickKey("escape")) {
+    quit = true;
   }
 
-  // Cleanup
-  delete number_text;
-  delete color_text;
-  delete shape_text;
+  for (int i = 1; i < max_number; i++) {
+    if (input.keyDown(to_string(i)) && !timing.locked("animating")) {
+      shuffle(i);
+    }
+  }
+  if (input.keyDown("0") && !timing.locked("animating")) {
+    shuffle(max_number);
+  }
+  array<string, max_number - 1> rando_letters = {"a", "s", "d", "f", "g", "h", "j", "k", "l"};
+  for (int i = 0; i < rando_letters.size(); i++) {
+    if (input.keyDown(rando_letters[i]) && !timing.locked("animating")) {
+      shuffle(-1);
+    }
+  }
+  array<string, max_number> color_letters = {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"};
+  for (int i = 0; i < color_letters.size(); i++) {
+    if (input.keyDown(color_letters[i]) && !timing.locked("animating")) {
+      int color_num = i;
+      color_value = color_values[color_num];
+      color_name = color_names[color_num];
+
+      remake();
+    }
+  }
+  if(input.keyDown("up") && !timing.locked("animating")) {
+    number = (number + max_number) % max_number + 1;
+    remake();
+  }
+  if(input.keyDown("down") && !timing.locked("animating")) {
+    number = (number + max_number - 2) % max_number + 1;
+    remake();
+  }
 }
 
 int randomOutside(int size) {
-  int x = logic.randomInt(0, size);
+  int x = math_utils.randomInt(0, size);
   if (x < (size / 2)) {
     return -x;
   } else {
@@ -125,12 +278,12 @@ int randomOutside(int size) {
 
 void shuffle(int new_number) {
   if (new_number == -1) {
-    number = logic.randomInt(1, 11);
+    number = math_utils.randomInt(1, max_number + 1);
   } else {
     number = new_number;
   }
-  shape = shapes[logic.randomInt(0, shapes.size())];
-  int color_num = logic.randomInt(0, color_values.size());
+  shape = shapes[math_utils.randomInt(0, shapes.size())];
+  int color_num = math_utils.randomInt(0, color_values.size());
   color_value = color_values[color_num];
   color_name = color_names[color_num];
 
@@ -168,12 +321,32 @@ void remake() {
     shape_text->setText(shape + "s");
   }
 
-  number_text->x = (int) (0.5 * (screen_width - number_text->getWidth() - color_text->getWidth() - shape_text->getWidth() - 60));
-  number_text->y = hot_config.getInt("layout", "number_text_y");
-  color_text->x = number_text->x + number_text->getWidth() + 30;
-  color_text->y = hot_config.getInt("layout", "color_text_y");
-  shape_text->x = number_text->x + number_text->getWidth() + color_text->getWidth() + 60;
-  shape_text->y = hot_config.getInt("layout", "shape_text_y");
+  number_text->setPosition({
+    (int) (
+      0.5 * (hot_config.getInt("layout", "screen_width") 
+        - number_text->getWidth() 
+        - color_text->getWidth() 
+        - shape_text->getWidth() 
+        - 60)
+    ),
+    hot_config.getInt("layout", "number_text_y")
+  });
+
+  color_text->setPosition({
+    number_text->getPosition().x + number_text->getWidth() + 30,
+    hot_config.getInt("layout", "color_text_y")
+  });
+
+  shape_text->setPosition({
+    number_text->getPosition().x + number_text->getWidth() + color_text->getWidth() + 60,
+    hot_config.getInt("layout", "shape_text_y")
+  });
+
+  for (int i = 0; i < number; i++) {
+    shape_sprites[i]->setLabel(shape);
+    shape_sprites[i]->setScale(size);
+    shape_sprites[i]->setColor(color_value);
+  }
 
   sequence_timing = {};
   sequence_action = {};
@@ -190,98 +363,22 @@ void remake() {
     sequence_timing.push_back(fade_out_stagger);
   }
 
+  timing.makeSequenceWithFunction("animation_sequence", sequence_timing, animationSequence);
+
   float total_animating_duration = fade_in_duration + 3 * word_duration + (number - 1) * fade_out_stagger + fade_out_duration + 0.1;
-  logic.makeTimeLock("animating", total_animating_duration);
-}
+  timing.lock("animating", total_animating_duration);
 
-void handleInput() {
-  input.processInput();
-
-  if (input.threeQuickKey("escape")) {
-    quit = true;
-  }
-
-  for (int i = 1; i < 10; i++) {
-    if (input.keyDown(to_string(i)) && !logic.isTimeLocked("animating")) {
-      shuffle(i);
-    }
-  }
-  if (input.keyDown("0") && !logic.isTimeLocked("animating")) {
-    shuffle(10);
-  }
-  array<string, 9> rando_letters = {"a", "s", "d", "f", "g", "h", "j", "k", "l"};
-  for (int i = 0; i < rando_letters.size(); i++) {
-    if (input.keyDown(rando_letters[i]) && !logic.isTimeLocked("animating")) {
-      shuffle(-1);
-    }
-  }
-  array<string, 10> color_letters = {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"};
-  for (int i = 0; i < color_letters.size(); i++) {
-    if (input.keyDown(color_letters[i]) && !logic.isTimeLocked("animating")) {
-      int color_num = i;
-      color_value = color_values[color_num];
-      color_name = color_names[color_num];
-
-      remake();
-    }
-  }
-  if(input.keyDown("up") && !logic.isTimeLocked("animating")) {
-    number = (number + 10) % 10 + 1;
-    remake();
-  }
-  if(input.keyDown("down") && !logic.isTimeLocked("animating")) {
-    number = (number + 8) % 10 + 1;
-    remake();
-  }
-}
-
-void handleAction() {
-  if (logic.isTimeLocked("animating")) {
-    float total = 0;
-
-    for (int i = 0; i < sequence_timing.size(); i++) {
-      if (logic.timeSince("animating") >= total && logic.timeSince("animating") <= total + sequence_timing[i]) {
-        string action = sequence_action[i];
-        if (!logic.isTimeLocked(action)) {
-          if (action.find("fade_in") != string::npos) {
-            effects.makeTween("fade_in_fade", 0, 1, fade_in_duration);
-            effects.makeShake(action + "_shake", shake_width, fade_in_duration);
-            logic.makeTimeLock(action, fade_in_duration);
-          } else if (action == "number_word") {
-            effects.makeShake(action + "_shake", shake_width, word_duration);
-            sound.playSound(to_string(number), 1);
-            logic.makeTimeLock(action, word_duration);
-          } else if (action == "color_word") {
-            effects.makeShake(action + "_shake", shake_width, word_duration);
-            sound.playSound(color_name, 1);
-            logic.makeTimeLock(action, word_duration);
-          } else if (action == "shape_word") {
-            effects.makeShake(action + "_shake", shake_width, word_duration);
-            if (number < 2) {
-              sound.playSound(shape, 1);
-            } else {
-              sound.playSound(shape + "s", 1);
-            }
-            logic.makeTimeLock(action, word_duration);
-          } else if (action.find("fade_out_") != string::npos) {
-            effects.makeTween(action + "_fade", 1, 0, fade_out_duration);
-            effects.makeShake(action + "_shake", shake_width, fade_out_duration);
-            logic.makeTimeLock(action, fade_out_duration);
-          }
-        }
-      }
-      total += sequence_timing[i];
-    }
-  }
+  number_text->setColor(color_value);
+  color_text->setColor(color_value);
+  shape_text->setColor(color_value);
 }
 
 void render() {
-  graphics.clearScreen(screen_color);
+  graphics.clearScreen(hot_config.getString("layout", "screen_color"));
   graphics.draw2D();
 
-  if (logic.isTimeLocked("animating")) { 
-    float time_since = logic.timeSince("animating");
-    graphics.setColor(color_value, 1);
+  if (timing.locked("animating")) { 
+    float timing_since = timing.since("animating");
     for (int i = 0; i < number; i++) {
       position p;
       if (number % 2 == 0) {
@@ -289,53 +386,24 @@ void render() {
       } else {
         p = layouts.staggerWrap("shapes", i);
       }
-
-      if (effects.check("fade_in_fade")) {
-        graphics.setColor(color_value, effects.tween("fade_in_fade", effects.LINEAR));
-        p.x += effects.shake("fade_in_shake");
-        p.y += effects.shake("fade_in_shake");
-      }
-      //p.x += effects.shake("fade_out_" + to_string(i+1) + "_shake");
-      //p.y += effects.shake("fade_out_" + to_string(i+1) + "_shake");
-
-      if (effects.check("fade_out_" + to_string(i+1) + "_fade")) {
-        graphics.setColor(color_value, effects.tween("fade_out_" + to_string(i + 1) + "_fade", effects.LINEAR));
-      }
-      graphics.drawImage(shape, p.x, p.y, true, 0, size);
-      graphics.setColor(color_value, 1);
+      shape_sprites[i]->draw(p);
     }
+    graphics.setColor(color_value, 1);
 
-    
-    if (effects.check("fade_in_fade")) {
-      graphics.setColor("#FFFFFF", effects.tween("fade_in_fade", effects.LINEAR));
-    }
-    if (effects.check("fade_out_1_fade")) {
-      graphics.setColor("#FFFFFF", effects.tween("fade_out_1_fade", effects.LINEAR));
-    } 
-
-    number_text->setColor(color_value);
-    color_text->setColor(color_value);
-    shape_text->setColor(color_value);
-    float number_shake_x = effects.shake("number_word_shake");
-    float number_shake_y = effects.shake("number_word_shake");
-    float color_shake_x = effects.shake("color_word_shake");
-    float color_shake_y = effects.shake("color_word_shake");
-    float shape_shake_x = effects.shake("shape_word_shake");
-    float shape_shake_y = effects.shake("shape_word_shake");
-
-    graphics.translate(number_shake_x, number_shake_y, 0);
     number_text->draw();
-    graphics.translate(-number_shake_x, -number_shake_y, 0);
-
-    graphics.translate(color_shake_x, color_shake_y, 0);
     color_text->draw();
-    graphics.translate(-color_shake_x, -color_shake_y, 0);
-
-    graphics.translate(shape_shake_x, shape_shake_y, 0);
     shape_text->draw();
-    graphics.translate(-shape_shake_x, -shape_shake_y, 0);
-
   }
 
   graphics.updateDisplay();
+}
+
+void cleanup() {
+  delete number_text;
+  delete color_text;
+  delete shape_text;
+
+  for (int i = 0; i < shapes.size(); i++) {
+    delete shape_sprites[i];
+  }
 }
